@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>सेवा सहायक / Virtual Government Clerk</title>
+<style>
+  :root { --bg:#0d1117; --card:#161b22; --line:#30363d; --txt:#e6edf3; --dim:#8b949e; --grn:#3fb950; --amb:#d29922; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt);
+         font: 16px/1.5 "Segoe UI", "Nirmala UI", Mangal, sans-serif;
+         display:flex; flex-direction:column; height:100vh; }
+  header { padding:12px 18px; border-bottom:1px solid var(--line);
+           display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+  h1 { font-size:17px; margin:0; font-weight:600; }
+  select, button { font:inherit; background:#21262d; color:var(--txt);
+                   border:1px solid var(--line); border-radius:6px; padding:7px 12px; }
+  button { cursor:pointer; }
+  button:hover { border-color:var(--grn); }
+  #log { flex:1; overflow-y:auto; padding:20px 18px; display:flex;
+         flex-direction:column; gap:12px; }
+  .m { max-width:80%; padding:11px 15px; border-radius:12px; white-space:pre-wrap; }
+  .clerk { background:var(--card); border:1px solid var(--line); border-bottom-left-radius:3px; }
+  .me { background:#1f3b57; align-self:flex-end; border-bottom-right-radius:3px; }
+  .sys { align-self:center; font-size:12px; color:var(--dim); background:transparent;
+         border:1px dashed var(--line); }
+  .sys.tool { color:var(--amb); border-color:var(--amb); }
+  #bar { display:flex; gap:12px; align-items:center; padding:14px 18px;
+         border-top:1px solid var(--line); }
+  #talk { flex:1; padding:15px; font-size:17px; font-weight:600; border-radius:8px; }
+  #talk.live { background:var(--grn); color:#04240c; border-color:var(--grn); }
+  #hint { font-size:12px; color:var(--dim); }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%;
+         background:#30363d; margin-right:5px; vertical-align:middle; }
+  .dot.on { background:var(--grn); }
+</style>
+</head>
+<body>
+<header>
+  <h1>सेवा सहायक &mdash; Virtual Government Clerk</h1>
+  <select id="lang">
+    <option value="hi-IN">हिन्दी (Hindi)</option>
+    <option value="bn-IN">বাংলা (Bengali)</option>
+    <option value="te-IN">తెలుగు (Telugu)</option>
+    <option value="ta-IN">தமிழ் (Tamil)</option>
+    <option value="mr-IN">मराठी (Marathi)</option>
+    <option value="kn-IN">ಕನ್ನಡ (Kannada)</option>
+    <option value="gu-IN">ગુજરાતી (Gujarati)</option>
+    <option value="pa-IN">ਪੰਜਾਬੀ (Punjabi)</option>
+    <option value="ur-IN">اردو (Urdu)</option>
+    <option value="or-IN">ଓଡ଼ିଆ (Odia)</option>
+    <option value="ml-IN">മലയാളം (Malayalam)</option>
+    <option value="en-IN">English</option>
+  </select>
+  <span id="hint"><span class="dot" id="dot"></span><span id="hinttxt">ready</span></span>
+</header>
+
+<div id="log"></div>
+
+<div id="bar">
+  <button id="talk">🎙 Hold or click to speak</button>
+  <button id="reset">Reset</button>
+</div>
+
+<script>
+const log = document.getElementById('log');
+const talk = document.getElementById('talk');
+const langSel = document.getElementById('lang');
+const dot = document.getElementById('dot');
+const hinttxt = document.getElementById('hinttxt');
+const sid = Math.random().toString(36).slice(2);
+let busy = false, listening = false, recog = null;
+
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+function say(who, text, cls) {
+  const d = document.createElement('div');
+  d.className = 'm ' + (cls || who);
+  d.textContent = text;
+  log.appendChild(d);
+  log.scrollTop = log.scrollHeight;
+}
+
+function status(t, on) { hinttxt.textContent = t; dot.className = 'dot' + (on ? ' on' : ''); }
+
+if (!SR) {
+  say('sys', 'This browser has no Web Speech API. Use Chrome or Edge.', 'sys');
+  talk.disabled = true;
+}
+
+function speak(text) {
+  if (!window.speechSynthesis) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = langSel.value;
+  u.rate = 0.95;
+  const vs = speechSynthesis.getVoices();
+  const v = vs.find(x => x.lang.replace('_','-') === u.lang)
+         || vs.find(x => x.lang.startsWith(u.lang.slice(0,2)));
+  if (v) u.voice = v;
+  speechSynthesis.speak(u);
+}
+
+function startListening() {
+  if (!SR || listening || busy) return;
+  recog = new SR();
+  recog.lang = langSel.value;
+  recog.interimResults = true;
+  recog.continuous = false;
+  recog.onstart = () => { listening = true; talk.classList.add('live'); status('listening…', true); };
+  recog.onend   = () => { listening = false; talk.classList.remove('live');
+                          if (!busy) status('ready', false); };
+  recog.onerror = (e) => { status('mic error: ' + e.error, false);
+                           say('sys', 'Microphone error: ' + e.error, 'sys'); };
+  recog.onresult = (e) => {
+    const res = e.results[e.results.length - 1];
+    const text = res[0].transcript.trim();
+    if (!res.isFinal || !text) return;
+    recog.stop();
+    send(text);
+  };
+  recog.start();
+}
+
+const TOOL_LINE = {
+  search_web: '→ searching the live web',
+  open_page: '→ reading the page',
+  fill_form: '→ filling the form in, field by field',
+  click_button: '→ pressing the button',
+  read_result: '→ reading the confirmation back',
+  check_eligibility: '→ checking the official rules'
+};
+
+async function waitForTools() {
+  for (let i = 0; i < 90; i++) {
+    await new Promise(r => setTimeout(r, 1000));
+    const s = await (await fetch('/api/state/' + sid)).json();
+    if (!(s.in_flight || []).length) return;
+  }
+}
+
+async function send(text, cont) {
+  if (!cont) say('me', text);
+  busy = true;
+  talk.classList.remove('live');
+  status(cont ? 'clerk is working…' : 'clerk is typing…', true);
+  try {
+    const r = await fetch('/api/turn', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session: sid, text: cont ? '(results are ready)' : text })
+    });
+    const d = await r.json();
+    if (d.error) { say('sys', d.error, 'sys'); status('error', false); return; }
+    (d.events || []).forEach(t => say('sys', TOOL_LINE[t] || '→ ' + t, 'sys tool'));
+    say('clerk', d.reply);
+    speak(d.reply);
+    // She has heard "I'm doing it" already. Now wait for the result and ask
+    // again, so she never sits in silence while a page loads.
+    if (d.working) {
+      await waitForTools();
+      return send(text, true);
+    }
+    status('ready', false);
+  } catch (e) {
+    say('sys', 'Server error: ' + e.message, 'sys');
+    status('error', false);
+  } finally {
+    busy = false;
+  }
+}
+
+talk.addEventListener('click', startListening);
+document.getElementById('reset').addEventListener('click', () => {
+  location.reload();
+});
+langSel.addEventListener('change', () => {
+  window.speechSynthesis.cancel();
+  if (recog) { recog.abort(); recog = null; listening = false; }
+  talk.classList.remove('live');
+  status('ready', false);
+});
+
+window.speechSynthesis.getVoices();
+if (!window.speechSynthesis) say('sys', 'No speechSynthesis in this browser.', 'sys');
+</script>
+</body>
+</html>

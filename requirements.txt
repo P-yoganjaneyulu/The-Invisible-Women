@@ -1,0 +1,5 @@
+fastapi>=0.115
+uvicorn[standard]>=0.32
+openai>=1.55
+python-dotenv>=1.0
+playwright>=1.48
