@@ -1,146 +1,218 @@
 # The Invisible Woman
 
-**A voice agent that uses the internet for a woman who can't read it.**
+**She calls a number. The agent does the rest.**
 
-48% of girls in rural India have never used the internet. Of those who have, most
-were guided by a male family member. The exclusion is not a capability gap — it
-is an interface that assumes you can read.
-
-So we removed the interface. She speaks. An agent works. She never sees a screen.
+A voice agent that uses the internet on behalf of a woman who cannot read it.
+No app. No screen. No login. No one to ask.
 
 ---
 
-## What this is
+## Why a phone call, not an app
 
-The agent is a **general executor**. It is not tied to one government form.
+Every attempt to fix this reaches for a simpler screen. A cleaner form. Fewer
+taps. A voice assistant inside an app.
 
-It searches the live web, opens pages, reads them, finds form fields by the
-words printed next to them, types her answers in, presses the button, and reads
-the confirmation out loud.
+**A minimal UI is still not minimal for her.** She does not need a shorter menu.
+She needs a different interface entirely, because every interface we can ship
+still assumes five things she does not have:
 
-Point it at a page it has never seen and it works out what to press. There are
-**no hardcoded selectors anywhere in this repo.**
+1. She can read prompts, menus and labels.
+2. She understands icons, hamburger menus and forms.
+3. She can produce the textbook version of a state language.
+4. She has a phone of her own, in private.
+5. She knows what an email address, a password and an OTP are.
+
+Remove text and apps and the problem collapses to its three physical
+components: **hearing, speaking, and telephony.**
+
+And there is exactly one interface where those three already meet, and which
+she has used since childhood, without ever being taught it:
+
+**The phone call.**
+
+She already knows the green button means answer. She already knows the red one
+means hang up. That is not a tutorial we write — it is a reflex she has had
+since she was six years old. And she already knows that short, memorable,
+free numbers exist, because we have spent fifty years teaching her that
+**112, 100 and 108** work.
+
+So the design brief is not "design a nicer interface." It is:
+
+> **How short, how memorable, how government-looking, and how reassuring must
+> the number be so that dialling it is no harder than lifting a handset and
+> pressing green?**
+
+Everything below follows from that one constraint.
+
+### The feature phone changes everything
+
+A large share of rural India is still holding a Nokia — a 12-key handset with a
+torch on it. **A web app does not exist for her.** Not badly supported. Not
+slow. It does not exist. There is no browser to open.
+
+So an app is not a degraded version of this product. It is a version of this
+product that excludes the person we built it for.
+
+---
+
+## The problem
+
+48% of girls in rural India have never used the internet. Of those who have,
+most were guided by a male family member.
+
+Millions of women are locked out of digital systems **not by capability — but
+by design.**
+
+That distinction is the whole project. Nothing is wrong with her memory, her
+reasoning or her willingness. A system that she cannot use because it was built
+for someone else is not a system that failed her. It is a system that was never
+addressed to her.
+
+---
+
+## What we built
+
+An **agent** that talks to her on the phone, understands what she needs, and
+then goes and does it on the internet on her behalf.
 
 ```
-voice  ->  LLM (multilingual, tool-calling)
-            -> search_web   find it
-            -> open_page    read it
-            -> fill_form    write her answers into it
-            -> click_button press it
-            -> read_result  read the confirmation back
-            -> check_eligibility   the only source of truth for money
-        ->  voice reply
+        she speaks
+             |
+             v
+     +---------------+
+     |  the agent   |   hears her, in her dialect
+     +---------------+
+             |
+             v
+     +---------------+
+     |  the executor |   searches the web, opens pages,
+     |               |   reads them, fills forms, presses
+     |               |   buttons, reads back the result
+     +---------------+
+             |
+             v
+     +---------------+
+     |  the human    |   identity. Always a human.
+     +---------------+
+             |
+             v
+        she hears it done
 ```
 
-Government schemes are the vertical we demo, not the boundary of the product.
-`docs/problem-and-approach.md` has the full argument, including why a vector
-database is the wrong tool here and why eligibility must never come out of a
-language model.
+Two properties make this work:
+
+**The agent is general.** It is not a form filler for one portal. It searches,
+reads, and operates pages it has never seen. There are **no hardcoded form
+selectors anywhere in this codebase.** It finds a field by the words printed
+next to it.
+
+**The agent is temporary.** Her data lives inside a private browser instance
+that is created when she calls and destroyed the instant she hangs up. Nothing
+is written to a disk that could be lost, subpoenaed or read by the next person
+to hold the phone. There is no account to log into, and therefore no account
+to steal.
+
+And the money never comes out of the model. Amounts and eligibility run through
+plain Python with tests. The agent decides *what to do*. It never decides *what
+she is owed*.
 
 ---
 
-## Two rules the code actually enforces
-
-**1. Nothing auditable comes from the model.**
-Amounts, eligibility, and dates go through `clerk/eligibility.py` — plain Python
-with 9 tests. The model decides *what to do*. It never decides *what a woman is
-owed*. Ask it for a rupee amount and it has nothing to say unless
-`check_eligibility` returned one.
-
-**2. No tool blocks the audio path.**
-A browser fill takes ~20 seconds. If the voice loop waits for it, she hears dead
-air and assumes it failed and hangs up. `clerk/tools.py:spawn()` runs tools off
-the audio path so she can be spoken to while the page loads.
-
----
-
-## Honesty: what is real and what is simulated
+## What runs today, and what the design requires
 
 We would rather show the wall than hide it.
 
-| Real in this repo | Simulated / not built yet |
-|---|---|
-| Live web search (no key required) | Live **phone** calls — see open decisions below |
-| Real browser automation on real pages | The demo portal at `/portal/` is our own HTML, not `pmmvy.wcd.gov.in` |
-| Deterministic eligibility rules | Payment / DBT rails |
-| The general executor | Facial recognition, OTP, CAPTCHA — deliberately not automated |
-| Voice in/out via the browser's Web Speech API | Rural-dialect speech (current TTS/ASR is generic) |
+| | Runs today | Required by the design |
+|---|---|---|
+| **Interface** | Browser page, browser voice | **A phone number.** Not built — no carrier account yet |
+| **Language** | 11 languages in the UI picker | Rural dialects. Current speech is generic |
+| **Executor** | Real browser, real pages, real search | Same code — this part is done |
+| **Identity** | Human confirmation step | Same. Deliberately never automated |
 
-On the last row of the real column: automating Aadhaar facial recognition, or
-routing around an OTP sent to a phone she doesn't have, is not a technical
-problem to be solved later. It is biometric fraud and a terms-of-service
-violation. Identity is not a UI problem and cannot be made into one. A human
-confirmation step is the correct design, not a compromise — the official PMMVY
-guidance already names the nearest Anganwadi/ASHA worker as the person who fills
-this form. **We are not replacing the human clerk. We are removing the toll.**
+The executor is the hard part and it works today, against real pages. The
+transport is the easy part and it is not started. That ordering was
+deliberate: a voice agent that cannot act is a toy, and we would rather
+demo the part that is real than fake the part that sells better.
 
 ---
 
-## Run it
+## The demo
+
+1. Open the page, choose a language, press and hold the button, say what you
+   need in your own words.
+2. The agent asks **one question at a time**, in short sentences, with no
+   English words.
+3. A real Chrome window opens **on screen**. The agent finds the fields, types
+   her answers in, presses submit. You watch it happen.
+4. It reads the confirmation number back to her, digit by digit.
+
+Step 3 is the point. She said four sentences and a form got filled. Nobody
+touched a keyboard.
+
+### What is real and what is simulated
+
+| Real | Simulated |
+|---|---|
+| Live web search, no API key needed | Live **phone** calls |
+| Real browser automation on real pages | The demo portal is our own HTML, not the real government site |
+| Deterministic eligibility rules, 9 tests | Payment and bank transfer rails |
+| Field matching on sites never seen | Rural-dialect speech |
+| | Facial recognition, OTP, CAPTCHA — **deliberately** |
+
+---
+
+## The wall, and why we are not climbing it
+
+The real PMMVY portal asks three things we cannot honestly automate:
+
+- **Facial recognition** against her Aadhaar photo.
+- **An OTP** sent to the phone number linked with her Aadhaar — which is her
+  husband's phone, and she does not have access to it.
+- **CAPTCHA** and passive bot-detection on every `.gov.in`.
+
+Automating facial recognition is biometric fraud. Routing around an OTP on
+someone else's phone is fraud. Defeating CAPTCHA is a terms-of-service
+violation and an invitation to be blocked permanently.
+
+**These are not engineering problems we deferred. They are crimes we declined.**
+
+Identity is not a user-interface problem and no amount of interface work will
+make it one. The correct design is a human confirming, and the correct person
+is already there: the official guidance for PMMVY says the nearest **Anganwadi
+or ASHA worker** can fill the form online for her.
+
+So we do not replace the clerk. **We remove the toll.** The Anganwadi worker
+still verifies. They just stop spending two hours of a village's health budget
+walking to the block office to enter one woman's name.
+
+The agent's job is the part that is safe to automate, and it is also the part
+nobody will do for her at any price.
+
+---
+
+## Where this goes next
+
+- **Ship the transport.** Get a number. Three digits if a government partner
+  will give one; toll-free otherwise.
+- **Record real dialect audio** in 3 districts and retrain nothing — swap the
+  speech models, the architecture does not change.
+- **Generalise the demo away from schemes.** The executor is not
+  government-specific. The same code applies to a hospital form, a school
+  admission, a bank KYC, a crop subsidy.
+- **Keep identity human.** Always. That is not a limitation of the prototype.
+
+---
+
+## Run it yourself
 
 ```bash
-python -m venv .venv
-.venv\Scripts\activate          # Windows
 pip install -r requirements.txt
-
-copy .env.example .env          # then paste a key in
+copy .env.example .env        # paste any OpenAI-compatible key in
 uvicorn server:app --port 8000
 ```
 
-Open <http://localhost:8000>. The demo portal is at
-<http://localhost:8000/portal/>.
+Open <http://localhost:8000>. Any OpenAI-compatible endpoint works — Gemini and
+Groq are noted in `.env.example`.
 
-Any OpenAI-compatible endpoint works — see the comments in `.env.example` for
-Gemini and Groq.
-
-Playwright uses your **installed Chrome** (`channel="chrome"`), so there is no
-195 MB browser download. It falls back to bundled Chromium only if Chrome is
-absent.
-
-### Tests
-
-```bash
-python test_cligibility.py   # 9 checks, the rules
-python test_clerk.py         # 8 checks, the executor
-```
-
-`test_clerk.py` is the one that matters. Its final test boots the server, opens
-the demo portal, addresses every field **by its printed label rather than its
-id**, clicks Submit through the generic clicker, and reads back the reference
-number. The four field-matcher tests are what make that claim defensible: they
-assert the matcher finds the right field, rejects the wrong one, and handles the
-`pmpmvy_district` style of prefixed ids that real portals use.
-
----
-
-## Layout
-
-```
-server.py             FastAPI app, LLM turn loop, the agent's behaviour prompt
-index.html            the voice UI (browser Web Speech API)
-demo_portal.html      simulated government portal, for the demo
-landing.html          project landing page
-clerk/
-  browser.py          general browser control. locates fields by printed words
-  search.py           live web search. Tavily if you have a key, else DuckDuckGo
-  tools.py            tool schemas + dispatch. spawn() keeps the voice alive
-  eligibility.py      scheme rules as code. never ask the model for money
-docs/
-  problem-and-approach.md   the full argument
-test_clerk.py
-test_eligibility.py
-```
-
----
-
-## Open decisions
-
-**Speech stack.** Either keep OpenAI Realtime — zero lines of speech code, free
-barge-in, but no credible Hindi or rural-dialect voice — or keep the Twilio
-transport and swap the model peer for our own ASR → LLM → Indic TTS chain
-(~250 lines, ~1.5s latency). We lean toward the second: language *is* the
-problem statement, and the latency is affordable because this is a task
-executor, not a conversation.
-
-**Telephony.** No Twilio account wired up yet. The browser path proves the same
-code path; a phone number only decides who can try it.
+Full architecture, tool reference and failure modes: **[`docs/TECHNICAL.md`](docs/TECHNICAL.md)**
+The full argument behind the design: **[`docs/problem-and-approach.md`](docs/problem-and-approach.md)**
